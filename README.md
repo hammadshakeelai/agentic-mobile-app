@@ -67,6 +67,8 @@ This follows the design of Google's [android computer-use quickstart](https://gi
 
 ## Tests
 
+Run from the repo root:
+
 ```bash
 python -m unittest discover -s tests -v
 ```
