@@ -1,16 +1,20 @@
-"""Offline tests for the agent loop: a scripted fake Gemini client and a fake phone.
+"""Offline tests for the agent loop with scripted fake model APIs and a fake phone.
 
-Responses are built with the google-genai SDK's own Interaction models, and the
-function results we send back are validated against the SDK's FunctionResultStep,
-so a wire-format mistake fails here instead of against the live API.
+Gemini responses are built with the google-genai SDK's own Interaction models, and the function
+results we send back are validated against the SDK's FunctionResultStep, so a wire-format mistake
+fails here instead of against the live API. The Agnes (chat-completions) provider runs against a
+fake HTTP client using the request/response shapes confirmed against the live Agnes API.
 """
 
+import copy
+import json
 import unittest
 
 from google.genai._gaos.resources.interactions import FunctionResultStep, Interaction
 from google.genai._gaos.resources.interactions.tool import ComputerUse
 
-from phone_agent.agent import PhoneAgent
+from phone_agent.agent import ACTIONS, PhoneAgent
+from phone_agent.providers import ChatCompletionsProvider, GeminiProvider
 
 PNG = b"\x89PNG fake"
 
@@ -56,7 +60,7 @@ class FakeClient:
 
 
 def make_agent(client, bridge, **kw):
-    return PhoneAgent(client, bridge, settle_seconds=0, log_dir=None, out=lambda *_: None, **kw)
+    return PhoneAgent(GeminiProvider(client), bridge, settle_seconds=0, log_dir=None, out=lambda *_: None, **kw)
 
 
 class AgentLoopTest(unittest.TestCase):
@@ -148,11 +152,89 @@ class AgentLoopTest(unittest.TestCase):
             make_agent(client, FakeBridge(), sleep=waits.append).run("x")
         self.assertEqual(waits, [])
 
+    def test_numbers_sent_as_strings_are_parsed(self):
+        # Seen live: agnes-3.0-flash sent drag_and_drop(start_x='[499]', ...) as strings.
+        client = FakeClient([call("c1", "click", x="[500]", y="120"), call("c2", "click", x="left", y=1)],
+                            [reply("done")])
+        bridge = FakeBridge()
+        make_agent(client, bridge).run("tap")
+        self.assertEqual(bridge.calls, [("click", {"x": 500.0, "y": 120.0})])
+        self.assertTrue(client.requests[1]["input"][1]["is_error"])
+        self.assertIn("expected a number", text_of(client.requests[1]["input"][1]))
+
     def test_step_limit(self):
         client = FakeClient(*[[call(f"c{i}", "go_back")] for i in range(5)])
         agent = make_agent(client, FakeBridge(), max_steps=3)
         self.assertIn("3-step limit", agent.run("loop forever"))
         self.assertEqual(agent.actions_taken, 3)
+
+
+class FakeResponse:
+    def __init__(self, status_code=200, body=None, headers=None):
+        self.status_code, self._body, self.headers = status_code, body or {}, headers or {}
+        self.text = json.dumps(self._body)
+
+    def json(self):
+        return self._body
+
+
+def chat_reply(content="", tool_calls=()):
+    calls = [{"id": f"call_{i}", "type": "function", "function": {"name": name, "arguments": json.dumps(args)}}
+             for i, (name, args) in enumerate(tool_calls)]
+    return FakeResponse(body={"choices": [{"message": {"role": "assistant", "content": content,
+                                                       "tool_calls": calls or None}}]})
+
+
+class FakeHTTP:
+    def __init__(self, *responses):
+        self.responses, self.requests = list(responses), []
+
+    def post(self, url, headers=None, json=None, timeout=None):
+        self.requests.append({"url": url, "headers": headers, "body": copy.deepcopy(json)})
+        return self.responses.pop(0)
+
+
+def make_chat_agent(http, bridge, **kw):
+    provider = ChatCompletionsProvider("test-key", http=http)
+    return PhoneAgent(provider, bridge, settle_seconds=0, log_dir=None, out=lambda *_: None, **kw)
+
+
+class ChatProviderTest(unittest.TestCase):
+    def test_runs_actions_and_sends_results_in_chat_format(self):
+        http = FakeHTTP(chat_reply(tool_calls=[("open_app", {"app_name": "Settings", "intent": "open it"})]),
+                        chat_reply(content="Airplane mode is on."))
+        bridge = FakeBridge()
+        self.assertEqual(make_chat_agent(http, bridge).run("Turn on airplane mode"), "Airplane mode is on.")
+        self.assertEqual(bridge.calls, [("open_app", {"app_name": "Settings"})])
+
+        first, second = http.requests
+        self.assertTrue(first["url"].endswith("/chat/completions"))
+        self.assertEqual(first["headers"]["Authorization"], "Bearer test-key")
+        self.assertEqual(first["body"]["model"], "agnes-3.0-flash")
+        self.assertEqual({t["function"]["name"] for t in first["body"]["tools"]}, ACTIONS - {"take_screenshot"})
+
+        messages = second["body"]["messages"]
+        self.assertEqual([m["role"] for m in messages], ["system", "user", "assistant", "tool", "user"])
+        self.assertEqual(messages[2]["tool_calls"][0]["id"], "call_0")
+        self.assertEqual(messages[3]["tool_call_id"], "call_0")
+        self.assertIn('"opened": "Settings"', messages[3]["content"])
+        images = [p for m in messages if isinstance(m["content"], list) for p in m["content"] if p["type"] == "image_url"]
+        self.assertEqual(len(images), 1)  # older screenshots are dropped; only the newest is sent
+        self.assertEqual(messages[-1]["content"][1]["type"], "image_url")
+
+    def test_sensitive_action_needs_confirmation(self):
+        risky = ("click", {"x": 1, "y": 2, "sensitive": True, "intent": "Send the message"})
+        bridge = FakeBridge()
+        agent = make_chat_agent(FakeHTTP(chat_reply(tool_calls=[risky])), bridge, confirm=lambda _: False)
+        self.assertIn("declined", agent.run("send it"))
+        self.assertEqual(bridge.calls, [])
+
+    def test_rate_limit_uses_retry_after_header(self):
+        http = FakeHTTP(FakeResponse(429, {"error": "slow down"}, {"retry-after": "2"}), chat_reply(content="done"))
+        waits = []
+        self.assertEqual(make_chat_agent(http, FakeBridge(), sleep=waits.append).run("x"), "done")
+        self.assertEqual(waits, [3.0])
+        self.assertEqual(len(http.requests), 2)
 
 
 if __name__ == "__main__":

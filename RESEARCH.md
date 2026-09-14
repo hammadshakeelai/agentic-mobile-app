@@ -65,7 +65,7 @@ Short research notes (September 2026) behind this repo's MVP.
 
 Build the simplest thing that proves the loop and is honest about the risks:
 
-1. **Host-side ADB agent** (Python + `google-genai`), mirroring Google's reference design. It runs against an emulator or a USB-connected phone.
+1. **Host-side ADB agent** (Python + `google-genai`), mirroring Google's reference design. It runs against an emulator or a USB-connected phone. It supports two providers: Gemini's built-in computer-use tool, and an OpenAI-compatible vision model with tool calling (Agnes AI), where the agent declares the phone actions itself. In live tests both turned airplane mode on. Agnes took about 5 s per step versus about 35 s for Gemini, but it made more malformed calls and has no server-side safety checks.
 2. **Human-in-the-loop safety.** Actions flagged `require_confirmation` pause and ask you. They are never auto-acknowledged.
 3. **Hard limits.** A max step count, Ctrl+C to stop, and a `--dry-run` that tests the phone bridge without calling the model.
 4. **Keep a record.** Each run saves its screenshots and actions to `runs/` so you can see what the agent did.
