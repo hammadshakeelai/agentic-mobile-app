@@ -79,6 +79,8 @@ The loop tests run offline against a scripted fake Gemini client. They build res
 
 **Verified live** on an Android 16 emulator with `gemini-3.8-flash`. The task "Turn on airplane mode" took Gemini 3 actions (open Settings → Network & internet → toggle) in about 108 seconds, and `adb shell settings get global airplane_mode_on` went from `0` to `1`.
 
+Later runs of the exact command above, with the key read from `.env`, also drove the phone (opened Settings) but were cut short by the free-tier quota. See the limitations below.
+
 ## Known limitations
 
 - **Slow.** Each step is a round-trip to Gemini with a screenshot, typically about 30 seconds, so short tasks take a minute or two. Every request has a 120 second timeout.
