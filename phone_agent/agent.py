@@ -45,9 +45,11 @@ def _ask(question: str) -> bool:
 
 class PhoneAgent:
     def __init__(self, client, bridge, model="gemini-3.7-flash", thinking_level="medium",
-                 max_steps=30, settle_seconds=1.0, log_dir="runs", confirm=_ask, out=print):
+                 max_steps=30, settle_seconds=1.0, log_dir="runs", confirm=_ask, out=print,
+                 request_timeout=120):
         self.client, self.bridge = client, bridge
         self.model, self.thinking_level = model, thinking_level
+        self.request_timeout = request_timeout
         self.max_steps, self.settle_seconds = max_steps, settle_seconds
         self.confirm, self.out = confirm, out
         self.run_dir = Path(log_dir) / datetime.now().strftime("%Y%m%d-%H%M%S") if log_dir else None
@@ -105,6 +107,7 @@ class PhoneAgent:
                         "enable_prompt_injection_detection": True}],
                 generation_config={"thinking_level": self.thinking_level} if self.thinking_level else None,
                 previous_interaction_id=previous_id,
+                timeout=self.request_timeout,
             )
             previous_id = interaction.id
             calls = [s for s in interaction.steps or [] if s.type == "function_call"]

@@ -1,5 +1,6 @@
-# Secrets
-.env
+# Secrets (.env, .env2, .env.local, ...) but keep the template
+.env*
+!.env.example
 *.key
 
 # Python

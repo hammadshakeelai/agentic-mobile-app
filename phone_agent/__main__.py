@@ -12,10 +12,11 @@ from .adb import ADBBridge
 def load_dotenv(path: Path):
     if not path.exists():
         return
-    for line in path.read_text(encoding="utf-8").splitlines():
+    for line in path.read_text(encoding="utf-8-sig").splitlines():  # -sig: Windows editors add a BOM
         key, sep, value = line.partition("=")
-        if sep and not key.strip().startswith("#"):
-            os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+        key = key.strip().removeprefix("export ").strip()
+        if sep and key and not key.startswith("#"):
+            os.environ.setdefault(key, value.strip().strip('"').strip("'"))
 
 
 def dry_run(bridge: ADBBridge):
@@ -49,7 +50,7 @@ def main():
     parser.add_argument("--no-log", action="store_true", help="Don't save screenshots/actions to runs/")
     args = parser.parse_args()
 
-    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
     load_dotenv(Path.cwd() / ".env")
 
     try:
