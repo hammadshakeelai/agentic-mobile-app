@@ -118,6 +118,36 @@ class AgentLoopTest(unittest.TestCase):
         self.assertTrue(unknown["is_error"])
         self.assertIn("Unknown action", text_of(unknown))
 
+    def test_rate_limit_is_retried_after_suggested_delay(self):
+        class RateLimited(Exception):
+            status_code = 429
+
+        client = FakeClient([reply("done")])
+        real_create, attempts = client.create, []
+
+        def flaky_create(**request):
+            attempts.append(request)
+            if len(attempts) == 1:
+                raise RateLimited("Quota exceeded. Please retry in 2.5s.")
+            return real_create(**request)
+
+        client.create = flaky_create
+        waits = []
+        self.assertEqual(make_agent(client, FakeBridge(), sleep=waits.append).run("x"), "done")
+        self.assertEqual(waits, [3.5])
+        self.assertEqual(len(attempts), 2)
+
+    def test_non_transient_api_errors_are_not_retried(self):
+        class BadRequest(Exception):
+            status_code = 400
+
+        client = FakeClient()
+        client.create = lambda **_: (_ for _ in ()).throw(BadRequest("invalid request"))
+        waits = []
+        with self.assertRaises(BadRequest):
+            make_agent(client, FakeBridge(), sleep=waits.append).run("x")
+        self.assertEqual(waits, [])
+
     def test_step_limit(self):
         client = FakeClient(*[[call(f"c{i}", "go_back")] for i in range(5)])
         agent = make_agent(client, FakeBridge(), max_steps=3)

@@ -63,7 +63,9 @@ def main():
     task = " ".join(args.task).strip()
     if not task:
         parser.error("give a task, e.g.  python -m phone_agent \"Turn on airplane mode\"")
-    api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+    # Also accept framework-prefixed copies such as VITE_GEMINI_API_KEY from another project's .env.
+    api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY") or next(
+        (v for k, v in os.environ.items() if k.upper().endswith("_GEMINI_API_KEY") and v), None)
     if not api_key:
         sys.exit("Error: set GEMINI_API_KEY (in your environment or a .env file). "
                  "Get a key at https://aistudio.google.com/apikey")
@@ -82,6 +84,9 @@ def main():
         summary = f"API error: {e}"
         if "API_KEY_INVALID" in str(e):
             summary = "API error: your Gemini API key was rejected. Check GEMINI_API_KEY."
+        elif "429" in str(e):
+            summary = ("API error: Gemini quota exhausted (free tier allows only a few dozen requests; "
+                       "each step is one). Wait and retry, or enable billing for the key.")
         elif "404" in str(e) or "not found" in str(e).lower():
             summary += "\nTry another model, e.g. --model gemini-3.8-flash"
     print(f"\nResult: {summary}\nActions taken: {agent.actions_taken}")

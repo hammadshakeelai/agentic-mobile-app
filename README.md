@@ -38,7 +38,7 @@ This follows the design of Google's [android computer-use quickstart](https://gi
    .venv/Scripts/activate        # macOS/Linux: source .venv/bin/activate
    pip install -r requirements.txt
    ```
-3. **Add your key.** Copy `.env.example` to `.env` and paste your key. `.env` is gitignored.
+3. **Add your key.** Copy `.env.example` to `.env` and paste your key. `.env` is gitignored. Prefixed names copied from other projects, like `VITE_GEMINI_API_KEY`, also work.
 4. **Check the phone connection (no API calls):**
    ```bash
    python -m phone_agent --dry-run
@@ -82,6 +82,7 @@ The loop tests run offline against a scripted fake Gemini client. They build res
 ## Known limitations
 
 - **Slow.** Each step is a round-trip to Gemini with a screenshot, typically about 30 seconds, so short tasks take a minute or two. Every request has a 120 second timeout.
+- **Free-tier quota is small.** Every step is one API request, and a free key hit its limit (20 requests on `gemini-3.8-flash`) within a few test runs. Rate limits and server errors are retried up to 3 times using the wait time the API suggests. After that the run stops with a clear message. Enable billing for real use.
 - Typing uses `adb shell input text`, which is **ASCII only**. Non-ASCII text is reported back to the model as an error.
 - `open_app` matches common app names and package names. It can't read launcher labels for every app, so Gemini can call `list_apps` when a name doesn't match.
 - It needs a computer and ADB, so it's a developer/QA tool, not yet a consumer app.

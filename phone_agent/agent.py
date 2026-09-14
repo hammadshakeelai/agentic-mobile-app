@@ -2,6 +2,7 @@
 
 import base64
 import json
+import re
 import time
 from datetime import datetime
 from pathlib import Path
@@ -23,6 +24,8 @@ SYSTEM_PROMPT = """You are an agent operating an Android phone for the user.
 ACTIONS = {"click", "long_press", "drag_and_drop", "type", "press_key", "go_back",
            "open_app", "list_apps", "wait", "take_screenshot"}
 
+RETRYABLE_STATUS = {429, 500, 502, 503, 504}
+
 
 def _image(png: bytes) -> dict:
     return {"type": "image", "data": base64.b64encode(png).decode(), "mime_type": "image/png"}
@@ -36,6 +39,19 @@ def _final_text(interaction) -> str:
     return "\n".join(texts).strip() or "(no summary)"
 
 
+def _retry_delay(error: Exception, attempt: int) -> float | None:
+    """Seconds to wait before retrying a transient API error (rate limit, overload, timeout), else None."""
+    text = str(error)
+    status = getattr(error, "status_code", None)
+    if not isinstance(status, int):
+        match = re.search(r"Error code: (\d{3})", text)
+        status = int(match.group(1)) if match else None
+    if status not in RETRYABLE_STATUS and "timeout" not in type(error).__name__.lower():
+        return None
+    hint = re.search(r"retry in ([\d.]+)s", text)  # the API says how long a rate limit lasts
+    return min(float(hint.group(1)) + 1, 90) if hint else 10 * 2 ** attempt
+
+
 def _ask(question: str) -> bool:
     try:
         return input(f"{question} [y/N] ").strip().lower() in ("y", "yes")
@@ -46,10 +62,10 @@ def _ask(question: str) -> bool:
 class PhoneAgent:
     def __init__(self, client, bridge, model="gemini-3.8-flash", thinking_level="low",
                  max_steps=30, settle_seconds=1.0, log_dir="runs", confirm=_ask, out=print,
-                 request_timeout=120):
+                 request_timeout=120, max_retries=3, sleep=time.sleep):
         self.client, self.bridge = client, bridge
         self.model, self.thinking_level = model, thinking_level
-        self.request_timeout = request_timeout
+        self.request_timeout, self.max_retries, self.sleep = request_timeout, max_retries, sleep
         self.max_steps, self.settle_seconds = max_steps, settle_seconds
         self.confirm, self.out = confirm, out
         self.run_dir = Path(log_dir) / datetime.now().strftime("%Y%m%d-%H%M%S") if log_dir else None
@@ -64,6 +80,18 @@ class PhoneAgent:
             (self.run_dir / record["screenshot"]).write_bytes(png)
         with open(self.run_dir / "log.jsonl", "a", encoding="utf-8") as f:
             f.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+    def _create(self, **request):
+        for attempt in range(self.max_retries + 1):
+            try:
+                return self.client.interactions.create(timeout=self.request_timeout, **request)
+            except Exception as e:
+                delay = _retry_delay(e, attempt)
+                if delay is None or attempt == self.max_retries:
+                    raise
+                self.out(f"  .. API rate-limited or busy; retrying in {delay:.0f}s "
+                         f"({attempt + 1}/{self.max_retries})")
+                self.sleep(delay)
 
     def _execute(self, call) -> tuple[dict, bool]:
         """Run one function call. Returns (result payload, keep_going)."""
@@ -99,7 +127,7 @@ class PhoneAgent:
         previous_id = None
 
         while True:
-            interaction = self.client.interactions.create(
+            interaction = self._create(
                 model=self.model,
                 system_instruction=SYSTEM_PROMPT,
                 input=user_input,
@@ -107,7 +135,6 @@ class PhoneAgent:
                         "enable_prompt_injection_detection": True}],
                 generation_config={"thinking_level": self.thinking_level} if self.thinking_level else None,
                 previous_interaction_id=previous_id,
-                timeout=self.request_timeout,
             )
             previous_id = interaction.id
             calls = [s for s in interaction.steps or [] if s.type == "function_call"]
