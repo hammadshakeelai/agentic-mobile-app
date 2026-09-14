@@ -49,7 +49,7 @@ Short research notes (September 2026) behind this repo's MVP.
 - **Hands-free and accessibility wins.** Voice-first control for people who can't easily use a touchscreen.
 - **Automating chores.** Repetitive multi-tap flows like form filling, settings changes, and cross-app copy/paste.
 - **QA and testing.** Natural-language test scripts ("sign up with a new account and check the welcome screen") that survive UI changes better than coordinate-based scripts.
-- **Cheap to prototype.** One general model plus a thin action layer. This repo is about 200 lines.
+- **Cheap to prototype.** One general model plus a thin action layer. This repo's agent is about 350 lines of Python.
 
 ## 4. Cons and risks
 
