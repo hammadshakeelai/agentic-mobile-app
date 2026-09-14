@@ -44,7 +44,7 @@ def _ask(question: str) -> bool:
 
 
 class PhoneAgent:
-    def __init__(self, client, bridge, model="gemini-3.7-flash", thinking_level="medium",
+    def __init__(self, client, bridge, model="gemini-3.8-flash", thinking_level="low",
                  max_steps=30, settle_seconds=1.0, log_dir="runs", confirm=_ask, out=print,
                  request_timeout=120):
         self.client, self.bridge = client, bridge
@@ -133,6 +133,7 @@ class PhoneAgent:
                     "name": call.name,
                     "call_id": call.id,
                     "is_error": payload["status"] == "error",
-                    "result": [{"type": "text", "text": json.dumps(payload)}, _image(png)],
+                    # The API rejects computer-use results unless the screenshot comes first.
+                    "result": [_image(png), {"type": "text", "text": json.dumps(payload)}],
                 })
             user_input = results

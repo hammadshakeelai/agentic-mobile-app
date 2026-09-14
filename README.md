@@ -50,8 +50,8 @@ This follows the design of Google's [android computer-use quickstart](https://gi
 
 | Flag | Default | Meaning |
 |---|---|---|
-| `-m, --model` | `gemini-3.7-flash` | Any Gemini model with computer use (e.g. `gemini-3.8-flash`) |
-| `-t, --thinking-level` | `medium` | `minimal` / `low` / `medium` / `high` |
+| `-m, --model` | `gemini-3.8-flash` | Any Gemini model with computer use (e.g. `gemini-3.7-flash`) |
+| `-t, --thinking-level` | `low` | `minimal` / `low` / `medium` / `high` |
 | `-n, --max-steps` | `30` | Hard cap on actions |
 | `-d, --device` | – | ADB serial when several devices are connected |
 | `--dry-run` | – | Test the ADB bridge only |
@@ -75,8 +75,13 @@ python -m unittest discover -s tests -v
 
 The loop tests run offline against a scripted fake Gemini client. They build responses with the SDK's own models and validate the requests we send against the SDK's schema.
 
+## Status
+
+**Verified live** on an Android 16 emulator with `gemini-3.8-flash`. The task "Turn on airplane mode" took Gemini 3 actions (open Settings → Network & internet → toggle) in about 108 seconds, and `adb shell settings get global airplane_mode_on` went from `0` to `1`.
+
 ## Known limitations
 
+- **Slow.** Each step is a round-trip to Gemini with a screenshot, typically about 30 seconds, so short tasks take a minute or two. Every request has a 120 second timeout.
 - Typing uses `adb shell input text`, which is **ASCII only**. Non-ASCII text is reported back to the model as an error.
 - `open_app` matches common app names and package names. It can't read launcher labels for every app, so Gemini can call `list_apps` when a name doesn't match.
 - It needs a computer and ADB, so it's a developer/QA tool, not yet a consumer app.

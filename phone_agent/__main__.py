@@ -42,8 +42,8 @@ def dry_run(bridge: ADBBridge):
 def main():
     parser = argparse.ArgumentParser(prog="phone_agent", description="Let Gemini operate an Android phone.")
     parser.add_argument("task", nargs="*", help="What you want done, in plain language")
-    parser.add_argument("-m", "--model", default="gemini-3.7-flash", help="Gemini model id (default: %(default)s)")
-    parser.add_argument("-t", "--thinking-level", default="medium", choices=["minimal", "low", "medium", "high"])
+    parser.add_argument("-m", "--model", default="gemini-3.8-flash", help="Gemini model id (default: %(default)s)")
+    parser.add_argument("-t", "--thinking-level", default="low", choices=["minimal", "low", "medium", "high"])
     parser.add_argument("-n", "--max-steps", type=int, default=30, help="Hard cap on actions (default: %(default)s)")
     parser.add_argument("-d", "--device", help="ADB serial, if more than one device is connected")
     parser.add_argument("--dry-run", action="store_true", help="Test the phone bridge only; no API calls")

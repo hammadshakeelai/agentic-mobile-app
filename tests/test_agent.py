@@ -39,6 +39,10 @@ def reply(text):
     return {"type": "model_output", "content": [{"type": "text", "text": text}]}
 
 
+def text_of(function_result):
+    return next(c["text"] for c in function_result["result"] if c["type"] == "text")
+
+
 class FakeClient:
     def __init__(self, *turns):
         self.turns = [Interaction.model_validate({"id": f"i{n}", "status": "completed", "steps": steps})
@@ -77,8 +81,16 @@ class AgentLoopTest(unittest.TestCase):
         FunctionResultStep.model_validate(result)  # raises if our payload doesn't match the SDK schema
         self.assertEqual(result["call_id"], "c1")
         self.assertFalse(result["is_error"])
-        self.assertIn('"opened": "Settings"', result["result"][0]["text"])
-        self.assertEqual(result["result"][1]["mime_type"], "image/png")
+        self.assertIn('"opened": "Settings"', text_of(result))
+
+    def test_screenshot_is_first_in_function_result(self):
+        # The live API returns 400 ("requires function response to contain an image") when the
+        # text part comes first; the SDK schema accepts either order, so pin it here.
+        client = FakeClient([call("c1", "go_back")], [reply("done")])
+        make_agent(client, FakeBridge()).run("go back")
+        parts = client.requests[1]["input"][0]["result"]
+        self.assertEqual([p["type"] for p in parts], ["image", "text"])
+        self.assertEqual(parts[0]["mime_type"], "image/png")
 
     def test_declined_safety_confirmation_stops_without_acting(self):
         risky = call("c1", "click", x=10, y=10,
@@ -95,16 +107,16 @@ class AgentLoopTest(unittest.TestCase):
         bridge = FakeBridge()
         make_agent(client, bridge, confirm=lambda _: True).run("send hi")
         self.assertEqual(bridge.calls, [("click", {"x": 10, "y": 10})])
-        self.assertIn('"safety_acknowledgement": true', client.requests[1]["input"][0]["result"][0]["text"])
+        self.assertIn('"safety_acknowledgement": true', text_of(client.requests[1]["input"][0]))
 
     def test_errors_are_reported_back_to_the_model(self):
         client = FakeClient([call("c1", "click", x=-1, y=0), call("c2", "format_phone")], [reply("gave up")])
         make_agent(client, FakeBridge()).run("x")
         failed_tap, unknown = client.requests[1]["input"]
         self.assertTrue(failed_tap["is_error"])
-        self.assertIn("tap failed", failed_tap["result"][0]["text"])
+        self.assertIn("tap failed", text_of(failed_tap))
         self.assertTrue(unknown["is_error"])
-        self.assertIn("Unknown action", unknown["result"][0]["text"])
+        self.assertIn("Unknown action", text_of(unknown))
 
     def test_step_limit(self):
         client = FakeClient(*[[call(f"c{i}", "go_back")] for i in range(5)])

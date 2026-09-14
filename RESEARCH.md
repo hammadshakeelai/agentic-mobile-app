@@ -26,7 +26,7 @@ Short research notes (September 2026) behind this repo's MVP.
 
 - The **computer-use tool** accepts `environment: "mobile"`. The model receives a screenshot and returns actions such as `open_app`, `click`, `type`, `long_press`, `drag_and_drop`, `press_key`, `go_back`, `wait` and `list_apps`. Coordinates are on a normalized 0–999 grid, the same for Android and iOS ([Gemini API: Computer use](https://ai.google.dev/gemini-api/docs/computer-use), [Philipp Schmid's walkthrough](https://www.philschmid.de/gemini-android-use)).
 - Sensitive actions can come back with a `safety_decision` of `require_confirmation`. The client is expected to ask a human before acknowledging it. The tool also has an `enable_prompt_injection_detection` flag.
-- Model IDs move fast. Google's quickstart defaults to `gemini-3.7-flash`, and the models page lists `gemini-3.8-flash` as the newest Flash (GA 2026-09-02, per the [changelog](https://ai.google.dev/gemini-api/docs/changelog)). The MVP takes the model as a flag.
+- Model IDs move fast. Google's quickstart defaults to `gemini-3.7-flash`, and the models page lists `gemini-3.8-flash` as the newest Flash (GA 2026-09-02, per the [changelog](https://ai.google.dev/gemini-api/docs/changelog)). The MVP takes the model as a flag and defaults to `gemini-3.8-flash`, which passed its live test. One gotcha surfaced only against the live API: a function result must put the screenshot *before* any text part, or the request is rejected. The quickstart's order fails.
 
 ## 2. How good will it be?
 
