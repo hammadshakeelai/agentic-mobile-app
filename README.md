@@ -6,6 +6,8 @@ A small, deliberately simple MVP: **tell an AI model what you want done, and it 
 python -m phone_agent "Turn on airplane mode"
 ```
 
+Where this is heading, a simple all-in-one AI app for documents and phone tasks: see **[RESEARCH-NEXTGEN.md](RESEARCH-NEXTGEN.md)**.
+
 Is this a good idea, and how well does it work? Read **[RESEARCH.md](RESEARCH.md)** first. Short version: it's possible today on Android. It's reliable for short single-app tasks and weak on long multi-app ones. The hard problems are prompt injection and distribution, not raw capability.
 
 ## How it works
